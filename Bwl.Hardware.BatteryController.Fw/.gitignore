@@ -1,0 +1,9 @@
+bin
+debug
+release
+arduino_nano_generic
+*.elf
+*.bak
+cfg_*
+*.atsuo
+guid
