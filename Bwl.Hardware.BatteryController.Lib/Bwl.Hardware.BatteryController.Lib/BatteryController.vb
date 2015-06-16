@@ -11,6 +11,7 @@
         Public Property VoltageIn As Single = Single.NaN
         Public Property VoltageOut As Single = Single.NaN
         Public Property VoltageBattery As Single = Single.NaN
+        Public Property Voltageint0 As Single = Single.NaN
         Public Property CurrentOut As Single = Single.NaN
     End Class
     Private _ss As SimplSerialBus
@@ -47,10 +48,10 @@
         Dim result = _ss.Request(New SSRequest(0, 11, {}))
         If result.ResponseState <> ResponseState.ok And result.ResponseState <> 128 + 11 Then Throw New Exception("GetParameters: " + result.ToString)
         Dim params As New Parameters
-        params.BatteryDischargeOff = (CInt(result.Data(1)) << 8 + CInt(result.Data(2))) / 1000.0
-        params.BatteryDischargeOn = (CInt(result.Data(4)) << 8 + CInt(result.Data(5))) / 1000.0
-        params.BatteryChargeOff = (CInt(result.Data(7)) << 8 + CInt(result.Data(8))) / 1000.0
-        params.BatteryChargeOn = (CInt(result.Data(10)) << 8 + CInt(result.Data(11))) / 1000.0
+        params.BatteryDischargeOff = ((CInt(result.Data(1)) << 8) + CInt(result.Data(2))) / 1000.0
+        params.BatteryDischargeOn = ((CInt(result.Data(4)) << 8) + CInt(result.Data(5))) / 1000.0
+        params.BatteryChargeOff = ((CInt(result.Data(7)) << 8) + CInt(result.Data(8))) / 1000.0
+        params.BatteryChargeOn = ((CInt(result.Data(10)) << 8) + CInt(result.Data(11))) / 1000.0
         Return params
     End Function
 
@@ -60,9 +61,10 @@
         Dim state As New State
         state.IsDischarging = result.Data(0) > 0
         state.IsCharging = result.Data(1) > 0
-        state.VoltageIn = (CInt(result.Data(6)) << 8 + CInt(result.Data(7))) / 1000.0
-        state.VoltageBattery = (CInt(result.Data(9)) << 8 + CInt(result.Data(10))) / 1000.0
-        state.CurrentOut = (CInt(result.Data(15)) << 8 + CInt(result.Data(16))) / 1000.0
+        state.VoltageIn = ((CInt(result.Data(6)) << 8) + CInt(result.Data(7))) / 1000.0
+        state.VoltageBattery = ((CInt(result.Data(9)) << 8) + CInt(result.Data(10))) / 1000.0
+        state.Voltageint0 = ((CInt(result.Data(21)) << 8) + CInt(result.Data(22))) / 1000.0
+        state.CurrentOut = ((CInt(result.Data(15)) << 8) + CInt(result.Data(16))) / 1000.0
         Return state
     End Function
 
