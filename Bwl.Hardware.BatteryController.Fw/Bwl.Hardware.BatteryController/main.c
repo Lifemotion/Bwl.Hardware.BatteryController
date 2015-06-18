@@ -131,7 +131,7 @@ int main(void)
 		uint16_t vard=	get_voltage_ard();
 		//uint16_t curr=	get_current_out();
 		
-		byte vin_present=	(vin>BATT_VOLT_DISCHARGEON);
+		byte vin_present=	(vin>BATT_VOLT_CHARGEOFF);		 //???
 		//byte batt_empty=	(vbatt<BATT_VOLT_DISCHARGEOFF);
 		byte batt_low=		(vbatt<BATT_VOLT_DISCHARGEON);
 		byte batt_full=		(vbatt>BATT_VOLT_CHARGEON);
