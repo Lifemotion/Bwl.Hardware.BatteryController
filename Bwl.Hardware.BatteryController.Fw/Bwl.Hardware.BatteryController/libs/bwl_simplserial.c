@@ -1,54 +1,14 @@
-/*Exmaple program:
-#define F_CPU 8000000
-#define BAUD 9600
-#define DEV_NAME "DevTestPlatform"
+/*
+ * Bwl SimplSerial Lib
+ *
+ * Author: Igor Koshelev 
+ * Licensed: open-source Apache license
+ *
+ * Version: 29.07.2015 V1.3.1
+ */ 
 
-#include <avr/wdt.h>
-#include <avr/io.h>
-#include <util/setbaud.h>
-#include "bwl_uart.h"
 #include "bwl_simplserial.h"
-
-void sserial_send_start()
-{
-	
-};
-
-void sserial_send_end()
-{
-	
-};
-
-
-void sserial_process_request()
-{
-	if (sserial_request.command==10)
-	{
-		sserial_response.result=0;
-		sserial_response.datalength=12;
-		sserial_send_response();
-	}
-}
-
-int main(void)
-{
-	for (byte i=0; i<16; i++)
-	{
-		sserial_devname[i]=DEV_NAME[i];
-		sserial_devguid[i]=0;
-	}
-	uart_init_withdivider(UBRR_VALUE);
-	while(1)
-	{
-		sserial_poll_uart();
-		wdt_reset();
-	}
-}
-*/
-
 #include <avr/io.h>
-#include "bwl_simplserial.h"
-#include <util/crc16.h>
 #include <avr/pgmspace.h>
 
 #define CATUART_ADDITIONAL 8
@@ -56,20 +16,29 @@ int main(void)
 unsigned char sserial_buffer[CATUART_MAX_PACKET_LENGTH+CATUART_ADDITIONAL];
 unsigned int sserial_buffer_pointer;
 unsigned char sserial_buffer_overflow;
-uint16_t sserial_crc16=0xFFFF;
+uint16_t sserial_crc16;
 byte sserial_bootloader_present=0;
+
+void sserial_append_devname(byte startIndex, byte length, char* newname)
+{
+	for (int i=0; i<length; i++)
+	{
+		if (sserial_devname[i]<30){sserial_devname[i]=' ';}
+		sserial_devname[i+startIndex]=newname[i];
+	}
+}
 
 void sserial_find_bootloader()
 {
 	byte found=0;
-	uint16_t pos=FLASHEND-30;
+	uint16_t pos=FLASHEND-32;
 	do
 	{
 		pos--;
 		found=1;
-		for (uint16_t i=0; i<8; i++)
+		for (uint16_t i=0; i<7; i++)
 		{
-			if (pgm_read_byte(pos+i)!="BwlBoot:"[i]){found=0;i=8;}
+			if (pgm_read_byte(pos+i)!="BwlBoot"[i]){found=0;i=8;}
 		}
 	} while ((found==0)&&(pos>FLASHEND-512));
 	
@@ -80,7 +49,7 @@ void sserial_find_bootloader()
 			sserial_devname[i]=pgm_read_byte(pos+16+i);
 			sserial_devguid[i]=pgm_read_byte(pos+32+i);
 		}
-		for (byte i=0; i<8; i++)
+		for (byte i=0; i<16; i++)
 		{
 			sserial_bootname[i]=pgm_read_byte(pos+i);			
 		}
@@ -103,7 +72,7 @@ void sserial_sendbyte(byte bt)
 	uart_send(bt);sserial_crc16=_crc16_update(sserial_crc16,bt);
 	if (bt==0x98)
 	{
-		uart_send(0);//sserial_crc16=_crc16_update(sserial_crc16,0);
+		uart_send(0);
 	}
 }
 
@@ -118,7 +87,6 @@ void sserial_send_response ()
 	sserial_sendbyte(sserial_address>>8);
 	sserial_sendbyte(sserial_address&255);
 	sserial_sendbyte(sserial_response.result);
-	
 	for (unsigned int i=0; i< sserial_response.datalength; i++)
 	{
 		sserial_sendbyte(sserial_response.data[i]);
@@ -143,6 +111,33 @@ byte mask(byte current, byte newval ,byte mask)
 
 char sserial_process_internal()
 {
+	sserial_response.result=0;
+	sserial_response.datalength=0;
+	
+	//random based find
+	if (sserial_request.command==255)
+	{
+		byte byte1=sserial_request.data[1];
+		byte byte2=sserial_request.data[2];
+		byte byte3=sserial_request.data[3];
+		byte byte4=sserial_request.data[4];
+		byte delay1=byte1;
+		byte delay2=byte2;	
+		for (byte i=0; i<16; i++)
+		{
+			delay1^=sserial_devguid[i];
+			delay2^=sserial_devguid[i];
+			delay1+=byte3;
+			delay2+=byte4;
+			sserial_response.data[i]=sserial_devguid[i];
+		}
+		int total=(((int)delay1)<<4)+(int)delay2;
+	    var_delay_ms(total>>1);
+		sserial_response.result=170;
+		sserial_response.datalength=16;
+		sserial_send_response();
+		return 1;		
+	}
 	//device info
 	if (sserial_request.command==254)
 	{
@@ -150,8 +145,7 @@ char sserial_process_internal()
 		{
 			sserial_response.data[i]=sserial_devguid[i];
 			sserial_response.data[16+i]=sserial_devname[i];
-			sserial_response.data[32+i]=sserial_devname[16+i];
-			
+			sserial_response.data[32+i]=sserial_devname[16+i];	
 		}
 		sserial_response.data[48]=__DATE__[4];
 		sserial_response.data[48+1]=__DATE__[5];
@@ -159,25 +153,36 @@ char sserial_process_internal()
 		sserial_response.data[48+3]=__DATE__[2];
 		sserial_response.data[48+4]=__DATE__[9];
 		sserial_response.data[48+5]=__DATE__[10];
-		sserial_response.result=0;
-		sserial_response.datalength=56;
+		#ifndef IS_BOOTLOADER
+			for (byte i=0; i<16; i++)
+			{
+				sserial_response.data[54+i]=sserial_bootname[i];
+			}
+			for (byte i=0; i<6; i++)
+			{
+				sserial_response.data[70+i]=SSERIAL_VERSION[i];
+			}
+		#endif
+		sserial_response.datalength=86;
 		sserial_send_response();
 		return 1;
 	}
 	//set working address
 	if (sserial_request.command==253)
 	{
-		byte flag=1;
+		byte guid_match=1;
+		uint16_t new_address=(sserial_request.data[16]<<8)+sserial_request.data[17];
 		for (byte i=0; i<16; i++)
 		{
-			if(sserial_request.data[i]!=sserial_devguid[i]){flag=0;}
+			if(sserial_request.data[i]!=sserial_devguid[i]){guid_match=0;}
 		}
-		if (flag==1)
+		if (guid_match==1)
 		{
-			sserial_address=(sserial_request.data[16]<<8)+sserial_request.data[17];
-			sserial_response.datalength=0;
-			sserial_response.result=0;
+			sserial_address=new_address;
 			sserial_send_response();
+		}else
+		{
+			if (new_address==sserial_address){sserial_address=0;}
 		}
 		return 1;
 	}
@@ -193,24 +198,24 @@ char sserial_process_internal()
 		sserial_send_response();
 		return 1;
 	}
-	//goto boot/main
+	//goto boot/main or hang
 	if ((sserial_request.command==251))
 	{
-		sserial_response.datalength=0;
-		sserial_response.result=0;
-		if (sserial_request.data[0]==1)
-		{
+		#if defined(GOTO_PROG) || defined(GOTO_BOOT)
+		{		
 			sserial_send_response();
-			sserial_send_response();
-			asm volatile("jmp 0x0000"::);
 		}
-		if (sserial_request.data[0]==2)
-		{
-			sserial_send_response();
-			sserial_send_response();
-			asm volatile("jmp 0x7800"::);
-		}
-		return 1;
+		#endif
+		#ifdef GOTO_PROG
+		if (sserial_request.data[0]==1)	{GOTO_PROG}
+		#endif
+		#ifdef GOTO_BOOT
+		#ifndef IS_BOOTLOADER
+		if (sserial_request.data[0]==2)	{GOTO_BOOT}
+		#endif 
+		#endif
+		
+		if (sserial_request.data[0]==255){wdt_enable(WDTO_500MS); while(1);}	
 	}
 	//in-out control
 	if (sserial_request.command==250)
@@ -250,7 +255,6 @@ char sserial_process_internal()
 			sserial_response.data[12]=PIND;
 		}
 		sserial_response.datalength=16;
-		sserial_response.result=0;
 		sserial_send_response();
 		return 1;
 	}
